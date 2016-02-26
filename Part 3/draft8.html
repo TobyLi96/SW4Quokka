@@ -1,0 +1,359 @@
+<!doctype>
+<html>
+	<head>
+		<style>
+		body{
+			margin:0;
+			background: #eee;
+		}
+		#canvas{
+			width:1000px;
+			height:1000px;
+			background: gray;
+		}
+		</style>
+	</head>
+	<body>
+		<canvas id="canvas" width="1000" height="1000"></canvas>
+		<div id="page-wrapper">
+		  <h1>Text File Reader</h1>
+		  <div>
+		    Select the points file: 
+		    <input type="file" id="pointFileInput">
+		    Select the guards file: 
+		    <input type="file" id="guardFileInput">
+		    Select the refutation file:
+		    <input type="file" id="refutationInput">
+		  </div>
+		</div>
+	</body>
+</html>
+<script>
+
+function getIntersection(ray, segment) {
+
+	var r_px = ray.a.x;
+	var r_py = ray.a.y;
+	var r_dx = ray.b.x - ray.a.x;
+	var r_dy = ray.b.y - ray.a.y;
+
+	var s_px = segment.a.x;
+	var s_py = segment.a.y;
+	var s_dx = segment.b.x - segment.a.x;
+	var s_dy = segment.b.y - segment.a.y;
+
+	if (r_dx * s_dy == r_dy * s_dx) {
+    return null; // they do not intersect
+	}
+
+	var T2 = (r_dx * (s_py - r_py) + r_dy * (r_px - s_px)) / (s_dx * r_dy - s_dy * r_dx);
+	var T1 = (s_px + s_dx * T2 - r_px) / r_dx;
+
+	if (T1 < 0) return null;
+	if (T2 < 0 || T2 > 1) return null;
+
+	return {
+		x: r_px + r_dx * T1,
+		y: r_py + r_dy * T1,
+		param: T1
+	};
+
+}
+
+function getSightPolygon(sightX, sightY) {
+
+	var points = (function(segments) {
+		var a = [];
+		segments.forEach(function(seg) {
+			a.push(seg.a, seg.b);
+		});
+		return a;
+	})(segments);
+	var uniquePoints = (function(points) {
+		var set = {};
+		return points.filter(function(p){
+			var key = p.x + "," + p.y;
+			if (key in set){
+				return false;
+			} 
+			else {
+				set[key] = true;
+				return true;
+			}
+		});
+	})(points);
+
+	var uniqueAngles = [];
+	for (var j = 0; j < uniquePoints.length ; j++) {
+		var uniquePoint = uniquePoints[j];
+		var angle = Math.atan2(uniquePoint.y - sightY, uniquePoint.x - sightX);
+		uniquePoint.angle = angle;
+		uniqueAngles.push(angle - 0.00001, angle, angle + 0.00001);
+	}
+
+	var intersects = [];
+	for (var j = 0; j < uniqueAngles.length; j++){
+		var angle = uniqueAngles[j];
+
+		var dx = Math.cos(angle);
+		var dy = Math.sin(angle);
+
+		var ray = {
+			a: {x: sightX, y: sightY},
+			b: {x: sightX + dx, y: sightY + dy}
+		};
+
+		var closestIntersect = null;
+		for (var i = 0; i < segments.length; i++) {
+			var intersect = getIntersection(ray, segments[i]);
+			if(!intersect) continue;
+			if((!closestIntersect || intersect.param < closestIntersect.param) && intersect.param != 0) {
+				closestIntersect = intersect;
+			}
+		}
+
+		if(!closestIntersect) continue;
+		closestIntersect.angle = angle;
+
+		intersects.push(closestIntersect);
+
+	}
+
+	intersects = intersects.sort(function(a, b) {
+		return a.angle - b.angle;
+	});
+
+	return intersects;
+
+}
+
+
+var canvas = document.getElementById("canvas");
+var ctx = canvas.getContext("2d");
+var polygons = [];
+
+function draw() {
+	ctx.clearRect(0,0,canvas.width,canvas.height);
+	ctx.strokeStyle = "white";
+	for (var i = 0; i < 5; i++) {
+		var seg = segments[i];
+		ctx.beginPath();
+		ctx.moveTo(seg.a.x, seg.a.y);
+		ctx.lineTo(seg.b.x, seg.b.y);
+		ctx.stroke();
+	}
+
+	for (var i = 0; i < polygons.length; i++) {
+		drawPolygon(polygons[i], ctx, "white");
+	}
+
+	for (var i = 0; i < guardx.length; i++) {
+		ctx.fillStyle = "blue";
+		ctx.beginPath();
+    ctx.arc(guardx[i], guardy[i], 5, 0, 2 * Math.PI, false);
+    ctx.fill();
+	}
+	ctx.strokeStyle = "black";
+	for (var i = 5; i < segments.length; i++) {
+		var seg = segments[i];
+		ctx.beginPath();
+		ctx.moveTo(seg.a.x, seg.a.y);
+		ctx.lineTo(seg.b.x, seg.b.y);
+		ctx.stroke();
+	}
+	// alert(refute);
+	if (refute) {
+		alert(refutex);
+		alert(refutey);
+		ctx.fillStyle = "red";
+		ctx.beginPath();
+    ctx.arc(refutex, refutey, 5, 0, 2 * Math.PI, false);
+    ctx.fill();
+	}
+}
+
+function drawPolygon(polygon, ctx, fillStyle){
+	ctx.fillStyle = fillStyle;
+	ctx.beginPath();
+	ctx.moveTo(polygon[0].x, polygon[0].y);
+	for (var i = 1; i < polygon.length; i++) {
+		var intersect = polygon[i];
+		ctx.lineTo(intersect.x, intersect.y);
+	}
+	ctx.fill();
+}
+
+var pointString;
+var guardString;
+var refutationString;
+
+var xdiff;
+var ydiff;
+var scale;
+var xoffset;
+var yoffset;
+
+var refutex;
+var refutey;
+var refute = false;
+
+var segments = [
+	{a: {x: 0, y: 0}, b: {x: 1000, y:0}},
+	{a: {x: 1000, y: 0}, b: {x: 1000,y: 1000}},
+	{a: {x: 1000, y: 1000}, b: {x: 0,y: 1000}},
+	{a: {x: 0, y: 1000}, b: {x: 0,y: 0}},
+];
+
+var guardx = [];
+var guardy = [];
+
+function putCoords() {
+	var temp1 = pointString.split("), ");
+	var x = [];
+	var y = [];
+	for (var i = 0; i < temp1.length; i++) {
+		x.push(parseFloat(temp1[i].substring(1, temp1[i].indexOf(','))));
+		y.push(parseFloat(temp1[i].substring(temp1[i].indexOf(',') + 2)));
+	}
+
+	var bigx = x[0];
+	var smallx = x[0];
+	var bigy = y[0];
+	var smally = y[0];
+
+	for (var i = 1; i < x.length; i++) {
+    if (x[i] > bigx) {
+      bigx = x[i];
+    }
+    if (x[i] < smallx) {
+      smallx = x[i];
+    }
+    if (y[i] > bigy) {
+      bigy = y[i];
+    }
+    if (y[i] < smally) {
+      smally = y[i];
+    }
+  }
+  xdiff = bigx - smallx;
+  ydiff = bigy - smally;
+  scale = 20;
+  xoffset = 12;
+  yoffset = 12;
+  if (smallx < 0) {
+    xoffset = -smallx;
+  }
+  else {
+    xoffset = 0;
+  }
+  if (smally < 0) {
+    yoffset = -smally;
+  }
+  else {
+    yoffset = 0;
+  }
+  if (ydiff > xdiff) {
+    scale = canvas.height / ydiff;
+  }
+  else {
+    scale = canvas.height / xdiff;
+  }
+
+  for (var i = 0; i < x.length; i++) {
+  	x[i] = (x[i] + xoffset) * scale;
+  	y[i] = 1000 - (y[i] + yoffset) * scale;
+  }
+
+	for (var i = 0; i < temp1.length - 1; i++) {
+		segments.push({a: {x: parseFloat(x[i]), y: parseFloat(y[i])}, b: {x: parseFloat(x[i+1]), y: parseFloat(y[i+1])}});
+	}
+	segments.push({a: {x: parseFloat(x[x.length-1]), y: parseFloat(y[y.length-1])}, b: {x: parseFloat(x[0]), y: parseFloat(y[0])}});
+	var temp2 = guardString.split("), ");
+	for (var i = 0; i < temp2.length; i++) {
+		var tempx = parseFloat(temp2[i].substring(1, temp2[i].indexOf(',')));
+		var tempy = parseFloat(temp2[i].substring(temp2[i].indexOf(',') + 2));
+
+		guardx.push(parseFloat((tempx + xoffset) * scale));
+		guardy.push(parseFloat(1000 - (tempy + yoffset) * scale));
+	}
+	for (var i = 0; i < guardx.length; i++) {
+		polygons.push(getSightPolygon(parseFloat(guardx[i]), parseFloat(guardy[i])));
+		for (var angle = 0; angle < Math.PI * 2; angle += (Math.PI * 2) / 10) {
+			var dx = Math.cos(angle)/2;
+			var dy = Math.sin(angle)/2;
+			polygons.push(getSightPolygon(parseFloat(guardx[i]) + dx, parseFloat(guardy[i]) + dy));
+		};
+	}
+}
+
+function putRefutation() {
+	refute = true;
+	refutex = parseFloat(refutationString.substring(1, refutationString.indexOf(",")));
+	alert(refutex);
+	refutey = parseFloat(refutationString.substring(refutationString.indexOf(",") + 2));
+	alert(refutey);
+	refutex = (refutex + xoffset) * scale;
+	alert(refutex);
+	refutey = 1000 - (refutey + yoffset) * scale;
+	alert(refutey);
+}
+
+window.onload = function() {
+	var pointFileInput = document.getElementById('pointFileInput');
+	pointFileInput.addEventListener('change', function(e) {
+		var file = pointFileInput.files[0];
+		var textType = /text.*/;
+
+		if (file.type.match(textType)) {
+			var reader = new FileReader();
+
+			reader.onload = function(e) {
+				pointString = reader.result;
+			}
+
+			reader.readAsText(file);	
+		} else {
+			alert("File not supported!");
+		}
+	});
+
+	var guardFileInput = document.getElementById('guardFileInput');
+  guardFileInput.addEventListener('change', function(e) {
+      var file = guardFileInput.files[0];
+      var textType = /text.*/;
+
+      if (file.type.match(textType)) {
+          var reader = new FileReader();
+
+          reader.onload = function(e) {
+              guardString = reader.result;
+              putCoords();
+              draw();
+          }
+          reader.readAsText(file);    
+      } else {
+          alert("File not supported!");
+      }
+  });
+
+  var refutationInput = document.getElementById('refutationInput');
+  refutationInput.addEventListener('change', function(e) {
+      var file = refutationInput.files[0];
+      var textType = /text.*/;
+
+      if (file.type.match(textType)) {
+          var reader = new FileReader();
+
+          reader.onload = function(e) {
+              refutationString = reader.result;
+              putRefutation();
+              draw();
+          }
+          reader.readAsText(file);    
+      } else {
+          alert("File not supported!");
+      }
+  });
+};
+
+</script>
