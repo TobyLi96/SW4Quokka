@@ -135,7 +135,7 @@ var polygons = [];
 function draw() {
 	ctx.clearRect(0,0,canvas.width,canvas.height);
 	ctx.strokeStyle = "white";
-	for (var i = 0; i < 5; i++) {
+	for (var i = 0; i < 4; i++) {
 		var seg = segments[i];
 		ctx.beginPath();
 		ctx.moveTo(seg.a.x, seg.a.y);
@@ -154,7 +154,7 @@ function draw() {
     ctx.fill();
 	}
 	ctx.strokeStyle = "black";
-	for (var i = 5; i < segments.length; i++) {
+	for (var i = 4; i < segments.length; i++) {
 		var seg = segments[i];
 		ctx.beginPath();
 		ctx.moveTo(seg.a.x, seg.a.y);
